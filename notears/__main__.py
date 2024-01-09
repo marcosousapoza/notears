@@ -1,6 +1,6 @@
 from . import NOTEARS
 from .helper import generate_random_dag, generate_random_data
-from .helper import get_confusion_matrix
+from .helper import get_confusion_matrix, plot_graphs
 from random import randint, uniform
 import numpy as np
 from tqdm import tqdm
@@ -9,8 +9,8 @@ import mlflow.sklearn
 import mlflow.pyfunc
 import mlflow.pyfunc.model
 
-NUM_EXPERIMENTS = 1000
-
+NUM_EXPERIMENTS = 10
+EXPERIMENT_NAME = 'big-dags-20'
 
 def calculate_metrics(conf_matrix):
     TP, FP, TN, FN = conf_matrix[0, 0], conf_matrix[0, 1], conf_matrix[1, 0], conf_matrix[1, 1]
@@ -25,52 +25,72 @@ def calculate_metrics(conf_matrix):
     return FDR, TPR, FPR
 
 
-def run_experiment():
+def run_experiment(ex_id):
     # get parameters for data generation
     dag_size = 20
-    sparsity = uniform(0.5, 1)
-    sample_size = randint(200, 2000)
+    sparsity = uniform(0, 0.2)
+    sample_size = randint(100, 200)
     
     # generate data
     dag = generate_random_dag(dag_size, sparsity)
     data = generate_random_data(dag, sample_size)
 
     # get parameters for NOTEARS instance
-    l1 = uniform(0, 100)
-    eps = uniform(0, 1)
-    c = uniform(0, 1)
+    l1 = uniform(0.001, 10)
+    eps = 1e-6
+    c = uniform(0.8, 1)
     
     # fit notears
     nt = NOTEARS(l1=l1, eps=eps, c=c, omega=False)
     dag_found = nt.fit(data)
-    
-    # post process the results
+
+    # get best omega based on shanon distance
+    omega_best = np.inf
+    shd_best = np.inf
+    best_dag = None
     for omega in np.linspace(0, 1, 50):
-        # threshold
         dag_binary = (dag_found > omega).astype(int)
+        shd = np.sum(np.abs(dag - dag_binary))
+        if shd <= shd_best:
+            omega_best = omega
+            shd_best = shd
+            best_dag = dag_binary.copy()
+
+
+    with mlflow.start_run(experiment_id=ex_id) as run:
+
+        # make image and log
+        path = f'./img/{run.info.run_id}.png'
+        plot_graphs(dag, best_dag, path)
+        mlflow.log_artifact(path)
+
+        # log results with MLflow
+        mlflow.log_param("dag_size", dag_size)
+        mlflow.log_param("sparsity", sparsity)
+        mlflow.log_param("sample_size", sample_size)
+        mlflow.log_param("l1", l1)
+        mlflow.log_param("eps", eps)
+        mlflow.log_param("c", c)
+        mlflow.log_param("omega", omega_best)
+
         # calculate the findings
         conf_matrix = get_confusion_matrix(dag, dag_binary)
         FDR, TPR, FPR = calculate_metrics(conf_matrix)
-
-        # Log results with MLflow
-        with mlflow.start_run():
-            mlflow.log_param("dag_size", dag_size)
-            mlflow.log_param("sparsity", sparsity)
-            mlflow.log_param("sample_size", sample_size)
-            mlflow.log_param("l1", l1)
-            mlflow.log_param("eps", eps)
-            mlflow.log_param("c", c)
-            mlflow.log_param("omega", omega)
-            
-            # Log metrics
-            mlflow.log_metric("fdr", FDR)
-            mlflow.log_metric("tpr", TPR)
-            mlflow.log_metric("fpr", FPR)
-            mlflow.log_metric("shd", np.sum(np.abs(dag - dag_binary)))
-            
+    
+        # Log metrics
+        mlflow.log_metric("fdr", FDR)
+        mlflow.log_metric("tpr", TPR)
+        mlflow.log_metric("fpr", FPR)
+        mlflow.log_metric("shd", np.sum(np.abs(dag - dag_binary)))
+        
             
 if __name__ == '__main__':
     # Run tests on sparse big graphs
     mlflow.set_tracking_uri('sqlite:///experiment.db')
+    ex = mlflow.get_experiment_by_name(EXPERIMENT_NAME)
+    if ex != None:
+        ex_id = ex._experiment_id
+    else:
+        ex_id = mlflow.create_experiment(EXPERIMENT_NAME)
     for _ in tqdm(range(NUM_EXPERIMENTS)):
-        run_experiment()
+        run_experiment(ex_id)

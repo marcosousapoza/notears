@@ -10,18 +10,19 @@ def linear_sem_loss(X, W):
 
     Parameters:
     - X (numpy.ndarray): Input data matrix.
-    - W (numpy.ndarray): Structural coefficients matrix.
+    - W (numpy.ndarray or scipy.sparse.csr_matrix): Structural coefficients matrix.
 
     Returns:
     - Tuple[float, numpy.ndarray]: Loss and gradient.
     """
     assert X.shape[1] == W.shape[0], 'Incompatible dimensions between X and W'
 
-    # Loss calculation
-    loss = (0.5/X.shape[0]) * np.linalg.norm(X - X @ W, ord='fro')**2
-
-    # Gradient calculation. TODO: derive this!
-    d_loss = -1/X.shape[0] * X.T @ (X - X @ W)
+    # get dimension of matricies
+    n, d = X.shape
+    # loss calculation
+    loss = (0.5 / n) * np.linalg.norm(X - X.dot(W), ord='fro')**2
+    # gradient calculation
+    d_loss = (1 / n) * X.T @ X @ (W-np.identity(d))
 
     return loss, d_loss
 
@@ -29,11 +30,11 @@ def linear_sem_loss(X, W):
 class NOTEARS:
 
     def __init__(
-            self, l1:float, eps:float, c:float, omega:float,
-            objective:Callable[
+            self, l1: float, eps: float, c: float, omega: float,
+            objective: Callable[
                 [np.ndarray, np.ndarray], Tuple[float, np.ndarray]
             ] = linear_sem_loss
-        ) -> None:
+    ) -> None:
         self._l1 = l1
         self._W = None
         self._eps = eps
@@ -42,10 +43,10 @@ class NOTEARS:
         self._objective = objective
 
     def fit(self, X) -> "NOTEARS":
-        n,d = X.shape
+        n, d = X.shape
 
         # Initial guess for W
-        self._W = np.random.random(size=(d,d))
+        self._W = np.random.random(size=(d, d))
         self._a = np.random.random()
 
         ########################
@@ -54,7 +55,7 @@ class NOTEARS:
 
         def linear_constraint(W:np.ndarray):
             # define the derivative with respect to `W`
-            lc = np.trace(expm(W * W)) - d
+            lc = expm(W * W).trace() - d
             d_lc = expm(W * W).T * 2*W
             return lc, d_lc
 
@@ -63,14 +64,14 @@ class NOTEARS:
             W = w.reshape(d,d)
             # get value and gradient of objective function
             obj, d_obj = self._objective(X, W)
-            d_obj = d_obj.flatten()
+            d_obj = d_obj.reshape(-1)
             # get value and proximal gradient of the l1 norm
             l1_penalty = self._l1 * np.linalg.norm(w, ord=1)
             # l1 proximal operator as gradient
             d_l1_penalty = np.sign(w) * self._l1
             # get value and gradient of the dag constraint
             lc, d_lc = linear_constraint(W)
-            d_lc = d_lc.flatten()
+            d_lc = d_lc.reshape(-1)
             # compute the value and gradient of the augmented lagrange
             lag = obj + l1_penalty + 0.5*rho*lc**2 + alpha * lc
             d_lag = d_obj + d_l1_penalty + rho*lc*d_lc + alpha * d_lc
@@ -84,12 +85,12 @@ class NOTEARS:
         rho = 1 # initial penalty term for violations
 
         # define the variables to optimize over
-        W_guess = self._W.copy()
-        w_a = W_guess.flatten()
+        W_a:np.ndarray = self._W.copy()
+        w_a = W_a.flatten()
         alpha_a = self._a
 
         # calculate initial constraint violations
-        lc_old, _ = linear_constraint(W_guess)
+        lc_old, _ = linear_constraint(W_a)
         lc_new = float('inf')
 
         # very large penalty can lead to overflow errors. Can be ignored i.e. just take big value
@@ -128,6 +129,3 @@ class NOTEARS:
             self._W = W_guess
             return W_guess
         self._W = (W_guess > self._omega).astype(int)
-        
-    
-

@@ -1,6 +1,8 @@
 # Exclude database file
 experiment.db
 experiment.db-journal
+img/
+mlruns/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
