@@ -1,13 +1,31 @@
-from . import NOTEARS
-from .helper import generate_binary_dag, generate_random_data
-from .helper import get_confusion_matrix, plot_graphs
+from seminar.notears import NOTEARS
+from seminar.helper.data import generate_binary_dag, generate_random_data
+from seminar.evaluation.metric import get_confusion_matrix
+
 from random import randint, uniform
 import numpy as np
+import matplotlib.pyplot as plt
 from tqdm import tqdm
 import mlflow
 import mlflow.sklearn
 import mlflow.pyfunc
 import mlflow.pyfunc.model
+
+def plot_graphs(true_dag, found_dag, path):
+    # Create images
+    fig, ax = plt.subplots(1, 3, figsize=(15, 5))
+    # Plot the true DAG
+    ax[0].imshow(true_dag, cmap='gray')
+    ax[0].set_title('True DAG')
+    # Plot the best DAG with differences highlighted
+    ax[1].imshow(found_dag, cmap='gray')
+    ax[1].set_title('Best DAG')
+    diff_pixels = true_dag != found_dag
+    ax[2].imshow(diff_pixels, cmap='gray')
+    ax[2].set_title('Differences')
+    # Save the figure
+    plt.savefig(path)
+    plt.close()
 
 NUM_EXPERIMENTS = 10
 EXPERIMENT_NAME = 'neg-weights-5n'
@@ -77,7 +95,7 @@ def run_experiment(ex_id):
         conf_matrix = get_confusion_matrix(dag, dag_binary)
         FDR, TPR, FPR = calculate_metrics(conf_matrix)
     
-        # Log metrics
+        # log metrics
         mlflow.log_metric("fdr", FDR)
         mlflow.log_metric("tpr", TPR)
         mlflow.log_metric("fpr", FPR)
