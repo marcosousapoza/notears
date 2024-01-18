@@ -20,7 +20,7 @@ def plot_graphs(true_dag, found_dag, path):
     plt.savefig(path)
     plt.close()
 
-def generate_random_dag(n:int, alpha:float):
+def generate_binary_dag(n:int, alpha:float):
     """
     Generates a random Directed Acyclic Graph (DAG) represented as an adjacency matrix.
 
@@ -29,7 +29,7 @@ def generate_random_dag(n:int, alpha:float):
     - alpha: Sparseness parameter in [0, 1]
 
     Returns:
-    - A random DAG represented as an adjacency matrix
+    - A random DAG represented as a binary adjacency matrix
 
     Example:
     >>> random_dag = generate_random_dag(5, 0.3)
@@ -49,6 +49,39 @@ def generate_random_dag(n:int, alpha:float):
             if np.random.rand() < alpha:
                 # Add a directed edge from i to j
                 adjacency_matrix[var1, var2] = 1
+
+    return adjacency_matrix
+
+
+def generate_continuous_dag(n:int, alpha:float):
+    """
+    Generates a random Directed Acyclic Graph (DAG) represented as an adjacency matrix.
+
+    Parameters:
+    - n: Number of nodes in the graph
+    - alpha: Sparseness parameter in [0, 1]
+
+    Returns:
+    - A random DAG represented as a continuous adjacency matrix
+
+    Example:
+    >>> random_dag = generate_random_dag(5, 0.3)
+    >>> print(random_dag)
+    """
+    if not 0 <= alpha <= 1:
+        raise ValueError("Parameter alpha must be in the range [0, 1]")
+
+    # Initialize an empty adjacency matrix
+    adjacency_matrix = np.zeros((n, n), dtype=int)
+
+    # Generate random edges based on the sparseness parameter alpha
+    variables = np.arange(n)
+    np.random.shuffle(variables)
+    for i, var1 in enumerate(variables):
+        for var2 in variables[i+1 :]:
+            if np.random.rand() < alpha:
+                # Add a directed edge from i to j
+                adjacency_matrix[var1, var2] = np.random.uniform(-10, 10)
 
     return adjacency_matrix
 

@@ -1,5 +1,5 @@
 from . import NOTEARS
-from .helper import generate_random_dag, generate_random_data
+from .helper import generate_binary_dag, generate_random_data
 from .helper import get_confusion_matrix, plot_graphs
 from random import randint, uniform
 import numpy as np
@@ -10,7 +10,7 @@ import mlflow.pyfunc
 import mlflow.pyfunc.model
 
 NUM_EXPERIMENTS = 10
-EXPERIMENT_NAME = 'big-dags-20'
+EXPERIMENT_NAME = 'neg-weights-5n'
 
 def calculate_metrics(conf_matrix):
     TP, FP, TN, FN = conf_matrix[0, 0], conf_matrix[0, 1], conf_matrix[1, 0], conf_matrix[1, 1]
@@ -27,12 +27,12 @@ def calculate_metrics(conf_matrix):
 
 def run_experiment(ex_id):
     # get parameters for data generation
-    dag_size = 20
-    sparsity = uniform(0, 0.2)
+    dag_size = 5
+    sparsity = uniform(0.2, 1)
     sample_size = randint(100, 200)
     
     # generate data
-    dag = generate_random_dag(dag_size, sparsity)
+    dag = generate_binary_dag(dag_size, sparsity)
     data = generate_random_data(dag, sample_size)
 
     # get parameters for NOTEARS instance

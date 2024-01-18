@@ -10,7 +10,7 @@ def linear_sem_loss(X, W):
 
     Parameters:
     - X (numpy.ndarray): Input data matrix.
-    - W (numpy.ndarray or scipy.sparse.csr_matrix): Structural coefficients matrix.
+    - W (numpy.ndarray): Structural coefficients matrix.
 
     Returns:
     - Tuple[float, numpy.ndarray]: Loss and gradient.
@@ -128,4 +128,4 @@ class NOTEARS:
         if not self._omega:
             self._W = W_guess
             return W_guess
-        self._W = (W_guess > self._omega).astype(int)
+        self._W = (np.abs(W_guess) > self._omega).astype(int)
