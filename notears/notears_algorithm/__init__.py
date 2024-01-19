@@ -30,7 +30,7 @@ def linear_sem_loss(X, W):
 class NOTEARS:
 
     def __init__(
-            self, l1: float, eps: float, c: float, omega: float,
+            self, l1: float, eps: float, c: float,
             objective: Callable[
                 [np.ndarray, np.ndarray], Tuple[float, np.ndarray]
             ] = linear_sem_loss
@@ -39,8 +39,12 @@ class NOTEARS:
         self._W = None
         self._eps = eps
         self._c = c
-        self._omega = omega
         self._objective = objective
+
+    def get_discovered_graph(self, omega:float=None) -> np.ndarray:
+        if not omega:
+            return self._W
+        return (self._W > omega).astype(int)
 
     def fit(self, X) -> "NOTEARS":
         n, d = X.shape
@@ -125,7 +129,5 @@ class NOTEARS:
         np.seterr(**old_settings)
 
         # (c) return thresholded matrix or continuous matrix
-        if not self._omega:
-            self._W = W_guess
-            return W_guess
-        self._W = (np.abs(W_guess) > self._omega).astype(int)
+        self._W = W_guess.copy()
+        return self

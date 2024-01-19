@@ -1,6 +1,6 @@
 import numpy as np
 import networkx as nx
-from seminar.helper._util import check_dag
+from notears.helper._util import check_dag
 
 
 def generate_random_data(adjacency_matrix:np.ndarray, samples:int) -> np.ndarray:
