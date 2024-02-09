@@ -1,14 +1,13 @@
 import numpy as np
 import networkx as nx
-from notears.helper._util import check_dag
-
+from notears.metrics import is_dag
 
 def generate_random_data(adjacency_matrix:np.ndarray, samples:int) -> np.ndarray:
     dim = adjacency_matrix.shape[0]
     data = np.zeros(shape=(samples, dim))
 
     # check if the graph is a DAG
-    if not check_dag(adjacency_matrix):
+    if not is_dag(adjacency_matrix):
         raise ValueError("The provided graph is not a directed acyclic graph (DAG).")
 
     # generate data based on DAG
@@ -88,6 +87,6 @@ def generate_continuous_dag(n:int, alpha:float):
         for var2 in variables[i+1 :]:
             if np.random.rand() < alpha:
                 # Add a directed edge from i to j
-                adjacency_matrix[var1, var2] = np.random.uniform(-10, 10)
+                adjacency_matrix[var1, var2] = np.random.choice([-1, 1]) * np.random.uniform(0.1, 10)
 
     return adjacency_matrix
