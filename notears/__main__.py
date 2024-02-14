@@ -1,96 +1,82 @@
-from . import NOTEARS
-from .helper import generate_binary_dag, generate_random_data
-from .helper import get_confusion_matrix, plot_graphs
-from random import randint, uniform
+from random import uniform, randint
+from notears import NOTEARS
+from notears.test import run_experiment
+from notears.data import (
+    generate_binary_dag, 
+    generate_continuous_dag,
+    generate_random_data,
+)
+from notears.metrics import (
+    calculate_fdr, calculate_fpr, calculate_shd, calculate_tpr,
+    confusion_matrix, roc_auc, find_dag_violation_threshold
+)
+from notears.plot import (
+    difference_plot, plot_confusion_matrix, 
+    plot_roc_curve, number_edges_plot, plot_graph_from_adjacency_matrix
+)
+from notears.loss import linear_sem_loss
 import numpy as np
-from tqdm import tqdm
-import mlflow
-import mlflow.sklearn
-import mlflow.pyfunc
-import mlflow.pyfunc.model
+from datetime import datetime
 
-NUM_EXPERIMENTS = 10
-EXPERIMENT_NAME = 'neg-weights-5n'
-
-def calculate_metrics(conf_matrix):
-    TP, FP, TN, FN = conf_matrix[0, 0], conf_matrix[0, 1], conf_matrix[1, 0], conf_matrix[1, 1]
-
-    # Calculate additional metrics
-    P = TP + FN
-    R = TP + FP
-    FDR = (R + FP) / P if P != 0 else 0
-    TPR = TP / P if P != 0 else 0
-    FPR = (R + FP) / (TN + FP) if (TN + FP) != 0 else 0
-
-    return FDR, TPR, FPR
-
-
-def run_experiment(ex_id):
-    # get parameters for data generation
-    dag_size = 5
-    sparsity = uniform(0.2, 1)
-    sample_size = randint(100, 200)
-    
-    # generate data
-    dag = generate_binary_dag(dag_size, sparsity)
-    data = generate_random_data(dag, sample_size)
-
-    # get parameters for NOTEARS instance
+def experiment(W_true, dag_size, sparsity):
+    # get parameters for this experiment
     l1 = uniform(0.001, 10)
     eps = 1e-6
-    c = uniform(0.8, 1)
-    
-    # fit notears
-    nt = NOTEARS(l1=l1, eps=eps, c=c, omega=False)
-    dag_found = nt.fit(data)
+    c = uniform(0.05, 0.8)
+    dag_size = dag_size
+    sparsity = sparsity
+    sample_size = randint(40, 3000)
+    params = {
+        'l1':l1,
+        'eps':eps,
+        'c':c,
+        'dag_size':dag_size,
+        'sparsity':sparsity,
+        'sample_size':sample_size
+    }
+    # generate data
+    W_true_binary = (np.abs(W_true) > 0).astype(int)
+    data = generate_random_data(W_true, sample_size)
+    # fit notears and get results
+    nt = NOTEARS(l1=l1, eps=eps, c=c, objective=linear_sem_loss)
+    W_init = np.random.random(size=(dag_size, dag_size))
+    alpha_init = np.random.random()
+    start = datetime.now()
+    nt.fit(data, W_init, alpha_init)
+    duration = (datetime.now() - start).total_seconds()
+    W_pred = nt.get_discovered_graph()
+    threshold = find_dag_violation_threshold(W_pred)
+    omega = uniform(threshold, np.max(W_pred)) # sample feasible omega
+    params = params | nt.get_meta_data()
+    W_pred_binary = nt.get_discovered_graph(omega)
+    # calculate metrics
+    conf_matrix = confusion_matrix(W_true_binary, W_pred_binary)
+    FDR = calculate_fdr(W_true_binary, W_pred_binary)
+    TPR = calculate_tpr(W_true_binary, W_pred_binary)
+    FPR = calculate_fpr(W_true_binary, W_pred_binary)
+    SHD = calculate_shd(W_true_binary, W_pred_binary)
+    loss = linear_sem_loss(data, W_pred)[0]
+    tprs, fprs, thresholds, AUC = roc_auc(W_true_binary, W_true, num_thresholds=1000)
+    metrics = {"loss":loss, "fdr":FDR,"tpr":TPR,"fpr":FPR,"shd":SHD,"auc":AUC,"duration":duration}
+    # create figures
+    figures = [
+        (plot_roc_curve(tprs, fprs, thresholds), 'roc'),
+        (plot_confusion_matrix(conf_matrix), 'confusion_matrix'),
+        (difference_plot(W_true_binary, W_pred, W_pred_binary), 'difference_plot'),
+        (number_edges_plot(W_pred), 'edgecount'),
+        (plot_graph_from_adjacency_matrix(W_true_binary), 'true_graph'),
+        (plot_graph_from_adjacency_matrix(W_pred_binary), 'found_graph')
+    ]
+    return params, metrics, figures
 
-    # get best omega based on shanon distance
-    omega_best = np.inf
-    shd_best = np.inf
-    best_dag = None
-    for omega in np.linspace(0, 1, 50):
-        dag_binary = (dag_found > omega).astype(int)
-        shd = np.sum(np.abs(dag - dag_binary))
-        if shd <= shd_best:
-            omega_best = omega
-            shd_best = shd
-            best_dag = dag_binary.copy()
-
-
-    with mlflow.start_run(experiment_id=ex_id) as run:
-
-        # make image and log
-        path = f'./img/{run.info.run_id}.png'
-        plot_graphs(dag, best_dag, path)
-        mlflow.log_artifact(path)
-
-        # log results with MLflow
-        mlflow.log_param("dag_size", dag_size)
-        mlflow.log_param("sparsity", sparsity)
-        mlflow.log_param("sample_size", sample_size)
-        mlflow.log_param("l1", l1)
-        mlflow.log_param("eps", eps)
-        mlflow.log_param("c", c)
-        mlflow.log_param("omega", omega_best)
-
-        # calculate the findings
-        conf_matrix = get_confusion_matrix(dag, dag_binary)
-        FDR, TPR, FPR = calculate_metrics(conf_matrix)
-    
-        # Log metrics
-        mlflow.log_metric("fdr", FDR)
-        mlflow.log_metric("tpr", TPR)
-        mlflow.log_metric("fpr", FPR)
-        mlflow.log_metric("shd", np.sum(np.abs(dag - dag_binary)))
-        
-            
 if __name__ == '__main__':
-    # Run tests on sparse big graphs
-    mlflow.set_tracking_uri('sqlite:///experiment.db')
-    ex = mlflow.get_experiment_by_name(EXPERIMENT_NAME)
-    if ex != None:
-        ex_id = ex._experiment_id
-    else:
-        ex_id = mlflow.create_experiment(EXPERIMENT_NAME)
-    for _ in tqdm(range(NUM_EXPERIMENTS)):
-        run_experiment(ex_id)
+
+    # Graph to test
+    dag_size = 7
+    sparsity = 0.25
+    W_true = generate_continuous_dag(dag_size, sparsity)
+
+
+    db = 'sqlite:///experiment.db'
+    name = 'custom-init0'
+    run_experiment(db, name, 20, experiment, W_true, dag_size, sparsity)

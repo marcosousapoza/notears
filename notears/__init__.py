@@ -1,36 +1,19 @@
+import sys
 import numpy as np
 from scipy.linalg import expm
 from scipy.optimize import minimize
-from typing import Callable, Tuple
+from typing import Callable, Tuple, Dict, TypedDict
+from notears.loss import linear_sem_loss
 
-
-def linear_sem_loss(X, W):
-    """
-    Calculate the linear structural equation modeling (SEM) loss and its gradient.
-
-    Parameters:
-    - X (numpy.ndarray): Input data matrix.
-    - W (numpy.ndarray): Structural coefficients matrix.
-
-    Returns:
-    - Tuple[float, numpy.ndarray]: Loss and gradient.
-    """
-    assert X.shape[1] == W.shape[0], 'Incompatible dimensions between X and W'
-
-    # get dimension of matricies
-    n, d = X.shape
-    # loss calculation
-    loss = (0.5 / n) * np.linalg.norm(X - X.dot(W), ord='fro')**2
-    # gradient calculation
-    d_loss = (1 / n) * X.T @ X @ (W-np.identity(d))
-
-    return loss, d_loss
+class MetaData(TypedDict):
+    iterations:int
+    rho:int
 
 
 class NOTEARS:
 
     def __init__(
-            self, l1: float, eps: float, c: float, omega: float,
+            self, l1: float, eps: float, c: float,
             objective: Callable[
                 [np.ndarray, np.ndarray], Tuple[float, np.ndarray]
             ] = linear_sem_loss
@@ -39,15 +22,32 @@ class NOTEARS:
         self._W = None
         self._eps = eps
         self._c = c
-        self._omega = omega
         self._objective = objective
+        self._reset_meta_data()
 
-    def fit(self, X) -> "NOTEARS":
+    def _reset_meta_data(self):
+        self._meta:MetaData = {
+            'iterations':0,
+            'rho':0,
+        }
+
+    def get_discovered_graph(self, omega:float=None) -> np.ndarray:
+        if not omega:
+            return self._W
+        return (np.abs(self._W) > omega).astype(int)
+    
+    def get_meta_data(self) -> MetaData:
+        return self._meta.copy()
+
+    def fit(self, X, W_init, alpha_init) -> "NOTEARS":
         n, d = X.shape
 
         # Initial guess for W
-        self._W = np.random.random(size=(d, d))
-        self._a = np.random.random()
+        self._meta.clear()
+        self._W = W_init
+        self._a = alpha_init
+        # Reset meta data collection
+        self._reset_meta_data()
 
         ########################
         # Define the functions #
@@ -82,12 +82,13 @@ class NOTEARS:
         ###############################
 
         # get all needed parameters
-        rho = 1 # initial penalty term for violations
+        rho = 1.0 # initial penalty term for violations
 
         # define the variables to optimize over
         W_a:np.ndarray = self._W.copy()
         w_a = W_a.flatten()
         alpha_a = self._a
+        rho_max = sys.float_info.max # maximum value for rho -> avoid overflow
 
         # calculate initial constraint violations
         lc_old, _ = linear_constraint(W_a)
@@ -96,9 +97,10 @@ class NOTEARS:
         # very large penalty can lead to overflow errors. Can be ignored i.e. just take big value
         old_settings = np.seterr(over='ignore')
 
-        while lc_new > self._eps:
+        while lc_new > self._eps and rho < rho_max:
+            self._meta['iterations'] += 1
             # (a) solve primal i.e. optimize with respect to W
-            while lc_new > self._c * lc_old: # check if progress rate is sufficiently fast
+            while lc_new > self._c * lc_old and rho < rho_max: # check if progress rate is sufficiently fast
                 res = minimize(
                     lambda w: augmented_lagrange(w, rho, alpha_a),
                     jac=True, # derivative provided
@@ -107,10 +109,10 @@ class NOTEARS:
                 )
                 w_b:np.ndarray = res.x
                 W_guess = w_b.reshape(d,d)
-                # check if linear constraint is penalized sufficiently
                 lc_new, _ = linear_constraint(W_guess)
+                # check if linear constraint is penalized sufficiently
                 if lc_new > self._c * lc_old:
-                    rho <<= 1 # inflate by multiplying by 2
+                    rho = 2*rho # inflate by multiplying by itself
 
             # (b) dual ascent i.e. optimize with respect to alpha
             alpha_b:float = alpha_a + rho * lc_new
@@ -123,9 +125,9 @@ class NOTEARS:
 
         # reset old numpy settings
         np.seterr(**old_settings)
+        # update meta data
+        self._meta['rho'] = rho
 
         # (c) return thresholded matrix or continuous matrix
-        if not self._omega:
-            self._W = W_guess
-            return W_guess
-        self._W = (np.abs(W_guess) > self._omega).astype(int)
+        self._W = W_guess.copy()
+        return self
