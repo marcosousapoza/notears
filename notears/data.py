@@ -81,7 +81,7 @@ def generate_continuous_dag(n:int, alpha:float):
         raise ValueError("Parameter alpha must be in the range [0, 1]")
 
     # Initialize an empty adjacency matrix
-    adjacency_matrix = np.zeros((n, n), dtype=int)
+    adjacency_matrix = np.zeros((n, n), dtype=float)
 
     # Generate random edges based on the sparseness parameter alpha
     variables = np.arange(n)

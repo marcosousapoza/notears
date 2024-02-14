@@ -47,7 +47,6 @@ def experiment(W_true, dag_size, sparsity):
     W_pred = nt.get_discovered_graph()
     threshold = find_dag_violation_threshold(W_pred)
     omega = uniform(threshold, np.max(W_pred)) # sample feasible omega
-    params = params | nt.get_meta_data()
     W_pred_binary = nt.get_discovered_graph(omega)
     # calculate metrics
     conf_matrix = confusion_matrix(W_true_binary, W_pred_binary)
@@ -58,6 +57,7 @@ def experiment(W_true, dag_size, sparsity):
     loss = linear_sem_loss(data, W_pred)[0]
     tprs, fprs, thresholds, AUC = roc_auc(W_true_binary, W_true, num_thresholds=1000)
     metrics = {"loss":loss, "fdr":FDR,"tpr":TPR,"fpr":FPR,"shd":SHD,"auc":AUC,"duration":duration}
+    metrics = metrics | nt.get_meta_data()
     # create figures
     figures = [
         (plot_roc_curve(tprs, fprs, thresholds), 'roc'),
@@ -72,11 +72,10 @@ def experiment(W_true, dag_size, sparsity):
 if __name__ == '__main__':
 
     # Graph to test
-    dag_size = 7
+    dag_size = 8
     sparsity = 0.25
     W_true = generate_continuous_dag(dag_size, sparsity)
 
-
     db = 'sqlite:///experiment.db'
-    name = 'custom-init0'
+    name = '8dag_dense'
     run_experiment(db, name, 20, experiment, W_true, dag_size, sparsity)
