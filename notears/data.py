@@ -21,8 +21,11 @@ def generate_random_data(adjacency_matrix:np.ndarray, samples:int) -> np.ndarray
         else:
             data[:, var] = data @ adjacency_matrix[:, var]
         # add noise
-        data[:, var] += np.random.normal(size=samples, scale=3)
+        data[:, var] += np.random.normal(size=samples, scale=1)
     
+    # normalize data to [-2, 2] interval
+    data_standard = (data - np.min(data))/np.max(data)
+    data = (data_standard * 4) - 2
     return data
 
 
@@ -87,6 +90,6 @@ def generate_continuous_dag(n:int, alpha:float):
         for var2 in variables[i+1 :]:
             if np.random.rand() < alpha:
                 # Add a directed edge from i to j
-                adjacency_matrix[var1, var2] = np.random.choice([-1, 1]) * np.random.uniform(0.1, 10)
+                adjacency_matrix[var1, var2] = np.random.choice([-1, 1]) * np.random.uniform(0.1, 2)
 
     return adjacency_matrix

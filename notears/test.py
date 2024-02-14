@@ -12,7 +12,8 @@ def run_experiment(
             Dict[str, Any],
             Dict[str, float],
             List[Tuple[Figure, str]]
-        ]]
+        ]],
+        *args
     ):
     
     mlflow.set_tracking_uri(db)
@@ -24,7 +25,7 @@ def run_experiment(
         ex_id = mlflow.create_experiment(name)
     for _ in tqdm(range(n)):
         # run custom experiment
-        params, metrics, figures = experiment()
+        params, metrics, figures = experiment(*args)
         with mlflow.start_run(experiment_id=ex_id):
             mlflow.log_params(params)
             mlflow.log_metrics(metrics)

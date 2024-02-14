@@ -1,10 +1,34 @@
 import matplotlib.pyplot as plt
+import networkx as nx
 from matplotlib.colors import TwoSlopeNorm
 import seaborn as sns
 from matplotlib.figure import Figure
-from notears.metrics import is_dag, find_dag_violation_threshold
+from notears.metrics import find_dag_violation_threshold
 import numpy as np
 
+
+def plot_graph_from_adjacency_matrix(adj_matrix:np.ndarray) -> Figure:
+    """
+    Plots a graph based on the given adjacency matrix using NetworkX and matplotlib.
+    
+    Parameters:
+    - adj_matrix (np.ndarray): A square numpy array representing the adjacency matrix of the graph.
+    """
+    # Create a graph from the adjacency matrix
+    G = nx.DiGraph(adj_matrix)
+    
+    # Define node labels in LaTeX style
+    labels = {i: r'$X_{{{}}}$'.format(i + 1) for i in range(len(G.nodes))}
+    
+    # Draw the graph
+    fig, ax = plt.subplots(1, 1, figsize=(10, 7))
+    pos = nx.spring_layout(G)  # positions for all nodes
+    nx.draw(
+        G, pos, labels=labels, with_labels=True, 
+        node_size=700, node_color='skyblue', font_size=16, 
+        font_weight='bold', arrows=True, ax=ax
+    )
+    return fig
 
 def number_edges_plot(W:np.ndarray) -> Figure:
     W_abs = np.abs(W)
