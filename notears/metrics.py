@@ -7,9 +7,8 @@ def is_dag(W:np.ndarray) -> bool:
     return (np.trace(expm(W*W)) - d) <= 1e-6
 
 def find_dag_violation_threshold(W:np.ndarray, thresholds:np.ndarray=None) -> float:
-    W_abs = np.abs(W)
     if not thresholds:
-        thresholds = np.sort(W_abs.flatten())
+        thresholds = np.sort(W.flatten())
     left, right = 0, len(thresholds) - 1
     violation_threshold = 0
     # Binary serach to find threshold
@@ -17,7 +16,7 @@ def find_dag_violation_threshold(W:np.ndarray, thresholds:np.ndarray=None) -> fl
         mid = (left + right) // 2
         threshold = thresholds[mid]
         # Apply the threshold
-        W_thresholded = np.where(W_abs > threshold, 1, 0)
+        W_thresholded = np.where(W > threshold, 1, 0)
         if not is_dag(W_thresholded):
             left = mid + 1  # Move right if it is not a DAG
         else:
@@ -61,13 +60,14 @@ def calculate_fdr(W_true:np.ndarray, W_pred:np.ndarray) -> float:
 
 def calculate_tpr(W_true:np.ndarray, W_pred:np.ndarray) -> float:
     TP = np.sum((W_true == 1) & (W_pred == 1))  # True positives
-    T = np.sum(W_true == 1)  # Total true edges
+    T = np.sum(W_pred == 1)  # Total true edges
     return TP / T if T != 0 else 0
 
 def calculate_fpr(W_true:np.ndarray, W_pred:np.ndarray) -> float:
-    R = np.sum((W_true == 1) & (W_pred == -1))  # Reversed edges
-    FP = np.sum((W_true == 0) & (W_pred == 1))  # False positives
-    F = np.sum(W_true == 0)  # Total non-edges in ground truth
+    Wt = W_true.T
+    R = np.sum((Wt == 1) & (W_pred == 1))  # Reversed edges
+    FP = np.sum((W_true == 0) & (W_pred == 0))  # False positives
+    F = np.sum(W_true == 0)
     return (R + FP) / F if F != 0 else 0
 
 def calculate_shd(W_true:np.ndarray, W_pred:np.ndarray) -> int:
@@ -78,15 +78,15 @@ def calculate_shd(W_true:np.ndarray, W_pred:np.ndarray) -> int:
     return E + M + R
 
 def roc_auc(W_true, W_pred, num_thresholds=100) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float]:
-    thresholds = np.linspace(0, np.max(np.abs(W_pred)), num_thresholds, endpoint=True)
+    thresholds = np.linspace(0, np.max(W_pred), num_thresholds, endpoint=True)
     tpr_values = []
     fpr_values = []
     for threshold in thresholds:
         tpr_values.append(
-            calculate_tpr(W_true, (np.abs(W_pred) >= threshold).astype(int))
+            calculate_tpr(W_true, (W_pred >= threshold).astype(int))
         )
         fpr_values.append(
-            calculate_fpr(W_true, (np.abs(W_pred) >= threshold).astype(int))
+            calculate_fpr(W_true, (W_pred >= threshold).astype(int))
         )
     tpr_array = np.array(tpr_values)
     fpr_array = np.array(fpr_values)

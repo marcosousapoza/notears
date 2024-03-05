@@ -1,6 +1,5 @@
 # Exclude database file
-experiment.db
-experiment.db-journal
+result/
 img/
 mlruns/
 
